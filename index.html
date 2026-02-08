@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sigma Frame Generator</title>
+    <title>MATTE</title>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -174,8 +174,8 @@
 </head>
 <body>
     <div class="container">
-        <h1>SIGMA FRAME GENERATOR</h1>
-        <p style="text-align: center; font-size: 11px; color: #888; margin-top: -30px; margin-bottom: 40px;">
+        <h1>MATTE</h1>
+        <p style="text-align: center; font-size: 13px; color: #888; margin-top: -35px; margin-bottom: 40px;">
             Unofficial tool for Sigma photographers
         </p>
         
@@ -559,8 +559,8 @@
             
             // 1行目: カメラ名
             const cameraFontSize = Math.round(imgWidth * fontSizeRatio);
-            ctx.font = `600 ${cameraFontSize}px "Cormorant Garamond", serif`;
-            ctx.fillStyle = '#222222';
+            ctx.font = `700 ${cameraFontSize}px "Cormorant Garamond", serif`;
+            ctx.fillStyle = '#111111';
             ctx.fillText(exifData.camera.toUpperCase(), padding, bottomY - matHeight * 0.70);
             
             // カラーパレット（1行目の右端）
@@ -585,8 +585,8 @@
             
             // 2行目: レンズ名
             const lensFontSize = Math.round(imgWidth * fontSizeRatio);
-            ctx.font = `600 ${lensFontSize}px "Cormorant Garamond", serif`;
-            ctx.fillStyle = '#222222';
+            ctx.font = `700 ${lensFontSize}px "Cormorant Garamond", serif`;
+            ctx.fillStyle = '#111111';
             const formattedLens = formatLensName(exifData.lens);
             ctx.fillText(formattedLens, padding, bottomY - matHeight * 0.45);
             
