@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --sigma-font: "Optima", "Cormorant Garamond", serif;
+            --sigma-font: "Cormorant Garamond", serif;
             --bg-color: #f5f5f5;
             --card-bg: #ffffff;
             --text-primary: #000000;
@@ -556,7 +556,7 @@
             
             // 1行目: カメラ名
             const cameraFontSize = Math.round(imgWidth * fontSizeRatio);
-            ctx.font = `600 ${cameraFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.font = `600 ${cameraFontSize}px "Cormorant Garamond", serif`;
             ctx.fillStyle = '#222222';
             ctx.fillText(exifData.camera.toUpperCase(), padding, bottomY - matHeight * 0.70);
             
@@ -582,14 +582,14 @@
             
             // 2行目: レンズ名
             const lensFontSize = Math.round(imgWidth * fontSizeRatio);
-            ctx.font = `600 ${lensFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.font = `600 ${lensFontSize}px "Cormorant Garamond", serif`;
             ctx.fillStyle = '#222222';
             const formattedLens = formatLensName(exifData.lens);
             ctx.fillText(formattedLens, padding, bottomY - matHeight * 0.45);
             
             // 3行目: 撮影設定
             const specFontSize = Math.round(imgWidth * fontSizeRatio * 0.944);
-            ctx.font = `500 ${specFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.font = `500 ${specFontSize}px "Cormorant Garamond", serif`;
             ctx.fillStyle = '#666666';
             
             // ズームレンズかどうかを判定（レンズ名に"-"が含まれる）
