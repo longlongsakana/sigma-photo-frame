@@ -200,7 +200,7 @@
         const saveBtn = document.getElementById('save-btn');
         
         let currentImage = null;
-        let currentFileName = ''; // 元のファイル名を保存
+        let currentFileName = '';
         let exifData = {
             camera: '--',
             lens: '--',
@@ -210,6 +210,59 @@
             colorMode: '',
             focalLength: null
         };
+
+        // ドラッグ&ドロップ機能
+        previewSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            previewSection.style.opacity = '0.7';
+        });
+
+        previewSection.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            previewSection.style.opacity = '1';
+        });
+
+        previewSection.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            previewSection.style.opacity = '1';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    await handleImageFile(file);
+                }
+            }
+        });
+
+        // 画像ファイル処理関数（共通化）
+        async function handleImageFile(file) {
+            currentFileName = file.name.replace(/\.[^/.]+$/, '');
+            
+            const isSigma = await parseExifData(file);
+            
+            if (!isSigma) {
+                alert('This tool is designed for Sigma cameras only.\nPlease upload a photo taken with a Sigma camera.');
+                fileInput.value = '';
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    drawFrame(img);
+                    canvas.style.display = 'block';
+                    saveBtn.classList.add('visible');
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
 
         // Exifバイナリ解析関数
         async function parseExifData(file) {
@@ -620,32 +673,7 @@
             const file = e.target.files[0];
             if (!file) return;
             
-            // 元のファイル名を保存（拡張子を除く）
-            currentFileName = file.name.replace(/\.[^/.]+$/, ''); // 拡張子を削除
-            
-            // Exif解析とSIGMAチェック
-            const isSigma = await parseExifData(file);
-            
-            if (!isSigma) {
-                alert('This tool is designed for Sigma cameras only.\nPlease upload a photo taken with a Sigma camera.');
-                // ファイル入力をリセット
-                fileInput.value = '';
-                return;
-            }
-            
-            // 画像読み込み
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const img = new Image();
-                img.onload = () => {
-                    currentImage = img;
-                    drawFrame(img);
-                    canvas.style.display = 'block';
-                    saveBtn.classList.add('visible');
-                };
-                img.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
+            await handleImageFile(file);
         });
         
         // PNG保存（互換性向上版）
