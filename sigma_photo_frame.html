@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sigma Frame Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sigma-font: "Optima", "Cormorant Garamond", serif;
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --text-primary: #000000;
+            --text-secondary: #888888;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            font-family: var(--sigma-font);
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-align: center;
+            margin-bottom: 40px;
+            color: var(--text-primary);
+        }
+        
+        .upload-section {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 4px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .file-button {
+            display: inline-block;
+            padding: 14px 40px;
+            background: var(--text-primary);
+            color: white;
+            font-family: var(--sigma-font);
+            font-size: 14px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        
+        .file-button:hover {
+            opacity: 0.8;
+        }
+        
+        #preview-section {
+            display: none;
+            background: var(--card-bg);
+            padding: 60px;
+        }
+        
+        #preview-canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 14px 40px;
+            font-family: var(--sigma-font);
+            font-size: 14px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.3s;
+        }
+        
+        .btn-primary {
+            background: var(--text-primary);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--text-primary);
+            border: 1px solid var(--text-primary);
+        }
+        
+        .btn:hover {
+            opacity: 0.8;
+        }
+        
+        .info-text {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 20px;
+            letter-spacing: 0.1em;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 10px;
+            }
+            
+            h1 {
+                font-size: 24px;
+                margin-bottom: 30px;
+            }
+            
+            .upload-section {
+                padding: 30px 20px;
+            }
+            
+            #preview-section {
+                padding: 30px 20px;
+            }
+            
+            .file-button {
+                font-size: 12px;
+                padding: 12px 30px;
+            }
+            
+            .info-text {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SIGMA FRAME GENERATOR</h1>
+        
+        <div class="upload-section">
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" accept="image/*">
+                <div class="file-button">SELECT IMAGE</div>
+            </div>
+            <p class="info-text">Upload your Sigma photo</p>
+        </div>
+        
+        <div id="preview-section">
+            <canvas id="preview-canvas"></canvas>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" id="save-btn">SAVE AS PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('preview-section');
+        const canvas = document.getElementById('preview-canvas');
+        const ctx = canvas.getContext('2d');
+        const saveBtn = document.getElementById('save-btn');
+        
+        let currentImage = null;
+        let currentFileName = ''; // 元のファイル名を保存
+        let exifData = {
+            camera: '--',
+            lens: '--',
+            fNumber: '--',
+            shutterSpeed: '--',
+            iso: '--',
+            colorMode: '',
+            focalLength: null
+        };
+
+        // Exifバイナリ解析関数
+        async function parseExifData(file) {
+            const buffer = await file.arrayBuffer();
+            const view = new DataView(buffer);
+            
+            try {
+                // JPEGマーカー確認
+                if (view.getUint16(0) !== 0xFFD8) {
+                    console.log('Not a JPEG file');
+                    return;
+                }
+                
+                // APP1 (Exif) セグメント検索
+                let offset = 2;
+                let exifOffset = -1;
+                
+                while (offset < view.byteLength - 4) {
+                    const marker = view.getUint16(offset);
+                    
+                    if (marker === 0xFFE1) { // APP1
+                        const segmentLength = view.getUint16(offset + 2);
+                        const exifHeader = String.fromCharCode(
+                            view.getUint8(offset + 4),
+                            view.getUint8(offset + 5),
+                            view.getUint8(offset + 6),
+                            view.getUint8(offset + 7)
+                        );
+                        
+                        if (exifHeader === 'Exif') {
+                            exifOffset = offset + 10; // Exifヘッダー + NULL2バイト後
+                            break;
+                        }
+                    }
+                    
+                    const segmentLength = view.getUint16(offset + 2);
+                    offset += 2 + segmentLength;
+                }
+                
+                if (exifOffset === -1) {
+                    console.log('No Exif data found');
+                    return;
+                }
+                
+                // エンディアン判定
+                const tiffHeader = view.getUint16(exifOffset);
+                const isLittleEndian = tiffHeader === 0x4949; // "II"
+                
+                // 0th IFD オフセット取得
+                const ifd0Offset = exifOffset + view.getUint32(exifOffset + 4, isLittleEndian);
+                const ifd0Entries = view.getUint16(ifd0Offset, isLittleEndian);
+                
+                let exifIFDOffset = -1;
+                
+                // 0th IFDからExif IFDポインタを取得
+                for (let i = 0; i < ifd0Entries; i++) {
+                    const entryOffset = ifd0Offset + 2 + (i * 12);
+                    const tag = view.getUint16(entryOffset, isLittleEndian);
+                    
+                    // Model (0x0110) - カメラ名として使用
+                    if (tag === 0x0110) {
+                        const valueOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                        const length = view.getUint32(entryOffset + 4, isLittleEndian);
+                        const model = readString(view, valueOffset, length);
+                        exifData.camera = model.trim();
+                        console.log('Camera Model:', exifData.camera);
+                    }
+                    
+                    // Exif IFD Pointer (0x8769)
+                    if (tag === 0x8769) {
+                        exifIFDOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                    }
+                }
+                
+                if (exifIFDOffset === -1) {
+                    console.log('No Exif IFD found');
+                    return;
+                }
+                
+                // Exif IFD 解析
+                const exifEntries = view.getUint16(exifIFDOffset, isLittleEndian);
+                let makerNoteOffset = -1;
+                
+                for (let i = 0; i < exifEntries; i++) {
+                    const entryOffset = exifIFDOffset + 2 + (i * 12);
+                    const tag = view.getUint16(entryOffset, isLittleEndian);
+                    const type = view.getUint16(entryOffset + 2, isLittleEndian);
+                    const count = view.getUint32(entryOffset + 4, isLittleEndian);
+                    
+                    // F値 (0x829D) - RATIONAL
+                    if (tag === 0x829D) {
+                        const valueOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                        const numerator = view.getUint32(valueOffset, isLittleEndian);
+                        const denominator = view.getUint32(valueOffset + 4, isLittleEndian);
+                        exifData.fNumber = (numerator / denominator).toFixed(1);
+                    }
+                    
+                    // シャッタースピード (0x829A) - RATIONAL
+                    if (tag === 0x829A) {
+                        const valueOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                        const numerator = view.getUint32(valueOffset, isLittleEndian);
+                        const denominator = view.getUint32(valueOffset + 4, isLittleEndian);
+                        
+                        if (numerator < denominator) {
+                            exifData.shutterSpeed = `1/${Math.round(denominator / numerator)}`;
+                        } else {
+                            exifData.shutterSpeed = (numerator / denominator).toFixed(1);
+                        }
+                    }
+                    
+                    // ISO (0x8827) - SHORT
+                    if (tag === 0x8827) {
+                        exifData.iso = view.getUint16(entryOffset + 8, isLittleEndian);
+                    }
+                    
+                    // 焦点距離 (0x920A) - RATIONAL
+                    if (tag === 0x920A) {
+                        const valueOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                        const numerator = view.getUint32(valueOffset, isLittleEndian);
+                        const denominator = view.getUint32(valueOffset + 4, isLittleEndian);
+                        exifData.focalLength = Math.round(numerator / denominator);
+                    }
+                    
+                    // レンズモデル (0xA434) - ASCII
+                    if (tag === 0xA434) {
+                        const length = view.getUint32(entryOffset + 4, isLittleEndian);
+                        const valueOffset = exifOffset + view.getUint32(entryOffset + 8, isLittleEndian);
+                        const lensModel = readString(view, valueOffset, length);
+                        exifData.lens = lensModel.replace(/SIGMA/gi, '').trim();
+                    }
+                    
+                    // MakerNote (0x927C)
+                    if (tag === 0x927C) {
+                        const makerNoteDataOffset = view.getUint32(entryOffset + 8, isLittleEndian);
+                        makerNoteOffset = exifOffset + makerNoteDataOffset;
+                        console.log('MakerNote found - data offset:', makerNoteDataOffset, 'absolute offset:', makerNoteOffset);
+                    }
+                }
+                
+                // MakerNote解析（カラーモード取得）
+                if (makerNoteOffset !== -1) {
+                    try {
+                        // ポインタ計算の基準は TIFFヘッダ(通常ファイル先頭から12バイト)
+                        let ifdOffset = makerNoteOffset + 12; 
+                        
+                        // エントリ数を取得 (0x66Aの位置にある2バイトをLEで読む)
+                        const entries = view.getUint16(makerNoteOffset + 10, true);
+                        
+                        if (entries > 0 && entries < 100) {
+                            for (let i = 0; i < entries; i++) {
+                                const entryOffset = ifdOffset + (i * 12);
+                                
+                                if (entryOffset + 12 > view.byteLength) break;
+                                
+                                const tag = view.getUint16(entryOffset, true);
+                                const type = view.getUint16(entryOffset + 2, true);
+                                const count = view.getUint32(entryOffset + 4, true);
+                                const dataValue = view.getUint32(entryOffset + 8, true);
+                                
+                                // カラーモードタグ (0x003D)
+                                if (tag === 0x003D) {
+                                    // ファイル先頭(0x00)から12バイト目(TIFFヘッダ) + ポインタ(0x0B0E) = 0x0B1A
+                                    let valueOffset = 12 + dataValue; 
+                                    
+                                    if (valueOffset + count <= view.byteLength) {
+                                        const colorMode = readString(view, valueOffset, count);
+                                        exifData.colorMode = colorMode.trim();
+                                        console.log('✓ Color Mode extracted:', exifData.colorMode);
+                                    }
+                                    break; 
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('MakerNote parsing error:', err);
+                    }
+                }
+                
+                console.log('Parsed Exif:', exifData);
+                
+                // SIGMAカメラかチェック
+                const isSigma = exifData.camera && 
+                               (exifData.camera.toUpperCase().includes('SIGMA') || 
+                                exifData.camera.toLowerCase().includes('sigma'));
+                
+                return isSigma;
+                
+            } catch (err) {
+                console.error('Exif parsing error:', err);
+                return false;
+            }
+        }
+        
+        // 文字列読み取りヘルパー
+        function readString(view, offset, length) {
+            const bytes = new Uint8Array(view.buffer, offset, length);
+            return new TextDecoder().decode(bytes).replace(/\0/g, '');
+        }
+        
+        // カラーパレット抽出関数（k-meansクラスタリング）
+        function extractColorPalette(image, numColors = 8) {
+            // 一時的なcanvasで画像をサンプリング
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // サンプリング用に縮小（高速化）
+            const sampleSize = 100;
+            tempCanvas.width = sampleSize;
+            tempCanvas.height = sampleSize;
+            tempCtx.drawImage(image, 0, 0, sampleSize, sampleSize);
+            
+            const imageData = tempCtx.getImageData(0, 0, sampleSize, sampleSize);
+            const pixels = [];
+            
+            // ピクセルデータを収集（サンプリング）
+            for (let i = 0; i < imageData.data.length; i += 16) { // 4ピクセルごとにサンプリング
+                const r = imageData.data[i];
+                const g = imageData.data[i + 1];
+                const b = imageData.data[i + 2];
+                const a = imageData.data[i + 3];
+                
+                if (a > 128) { // 半透明以上のピクセルのみ
+                    pixels.push([r, g, b]);
+                }
+            }
+            
+            if (pixels.length === 0) return [];
+            
+            // k-meansクラスタリング（簡易版）
+            let centroids = [];
+            
+            // 初期中心点をランダムに選択
+            for (let i = 0; i < numColors; i++) {
+                const randomIndex = Math.floor(Math.random() * pixels.length);
+                centroids.push([...pixels[randomIndex]]);
+            }
+            
+            // k-meansイテレーション（10回）
+            let finalClusters = [];
+            for (let iter = 0; iter < 10; iter++) {
+                const clusters = Array(numColors).fill(null).map(() => []);
+                
+                // 各ピクセルを最近傍の中心点に割り当て
+                pixels.forEach(pixel => {
+                    let minDist = Infinity;
+                    let minIndex = 0;
+                    
+                    centroids.forEach((centroid, index) => {
+                        const dist = Math.sqrt(
+                            Math.pow(pixel[0] - centroid[0], 2) +
+                            Math.pow(pixel[1] - centroid[1], 2) +
+                            Math.pow(pixel[2] - centroid[2], 2)
+                        );
+                        
+                        if (dist < minDist) {
+                            minDist = dist;
+                            minIndex = index;
+                        }
+                    });
+                    
+                    clusters[minIndex].push(pixel);
+                });
+                
+                // 最終イテレーションのクラスタを保存
+                if (iter === 9) {
+                    finalClusters = clusters;
+                }
+                
+                // 中心点を更新
+                centroids = clusters.map(cluster => {
+                    if (cluster.length === 0) return centroids[0]; // 空クラスタ対策
+                    
+                    const sum = cluster.reduce((acc, pixel) => {
+                        return [acc[0] + pixel[0], acc[1] + pixel[1], acc[2] + pixel[2]];
+                    }, [0, 0, 0]);
+                    
+                    return [
+                        Math.round(sum[0] / cluster.length),
+                        Math.round(sum[1] / cluster.length),
+                        Math.round(sum[2] / cluster.length)
+                    ];
+                });
+            }
+            
+            // 出現頻度（クラスタサイズ）でソート - 写真で最も使われている色順
+            const centroidsWithSize = centroids.map((centroid, index) => ({
+                color: centroid,
+                size: finalClusters[index].length
+            }));
+            
+            centroidsWithSize.sort((a, b) => b.size - a.size); // 出現頻度が高い順
+            
+            return centroidsWithSize.map(item => `rgb(${item.color[0]}, ${item.color[1]}, ${item.color[2]})`);
+        }
+        
+        // Canvas描画関数
+        function drawFrame(image) {
+            const imgWidth = image.width;
+            const imgHeight = image.height;
+            const aspectRatio = imgWidth / imgHeight;
+            
+            // アスペクト比による調整（余白・フォント・パディング）
+            let matHeightRatio, fontSizeRatio, paddingRatio;
+            
+            if (aspectRatio > 2.0) {
+                // 超横長（21:9など）
+                matHeightRatio = 0.20;
+                fontSizeRatio = 0.018;
+                paddingRatio = 0.025;
+            } else if (aspectRatio > 1.3) {
+                // 横長（3:2, 16:9など）- 標準
+                matHeightRatio = 0.13;
+                fontSizeRatio = 0.018;
+                paddingRatio = 0.025;
+            } else if (aspectRatio > 0.8) {
+                // スクエア付近 - やや大きめ
+                matHeightRatio = 0.15;
+                fontSizeRatio = 0.020;
+                paddingRatio = 0.025;
+            } else {
+                // 縦長（2:3, 9:16など）- フォント大きめ
+                matHeightRatio = 0.10;
+                fontSizeRatio = 0.028;
+                paddingRatio = 0.030;
+            }
+            
+            // 下部マット領域の高さ
+            const matHeight = Math.round(imgHeight * matHeightRatio);
+            
+            // Canvas全体サイズ
+            canvas.width = imgWidth;
+            canvas.height = imgHeight + matHeight;
+            
+            // 背景（白）
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 元画像を描画
+            ctx.drawImage(image, 0, 0, imgWidth, imgHeight);
+            
+            // カラーパレット抽出
+            const colorPalette = extractColorPalette(image, 5);
+            
+            // テキスト描画 - 3行レイアウト
+            const padding = imgWidth * paddingRatio;
+            const bottomY = imgHeight + matHeight;
+            ctx.textBaseline = 'alphabetic';
+            
+            // 1行目: カメラ名
+            const cameraFontSize = Math.round(imgWidth * fontSizeRatio);
+            ctx.font = `600 ${cameraFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.fillStyle = '#222222';
+            ctx.fillText(exifData.camera.toUpperCase(), padding, bottomY - matHeight * 0.72);
+            
+            // カラーパレット（1行目の右端）
+            const paletteSize = Math.round(cameraFontSize * 0.7);
+            const paletteGap = Math.round(paletteSize * 0.5);
+            const paletteStartX = imgWidth - padding - (paletteSize * colorPalette.length + paletteGap * (colorPalette.length - 1));
+            const paletteY = bottomY - matHeight * 0.72 - paletteSize * 0.4;
+            
+            colorPalette.forEach((color, index) => {
+                const x = paletteStartX + (paletteSize + paletteGap) * index + paletteSize / 2;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, paletteY, paletteSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(x, paletteY, paletteSize / 2, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+            
+            // 2行目: レンズ名
+            const lensFontSize = Math.round(imgWidth * fontSizeRatio);
+            ctx.font = `600 ${lensFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.fillStyle = '#222222';
+            const formattedLens = formatLensName(exifData.lens);
+            ctx.fillText(formattedLens, padding, bottomY - matHeight * 0.47);
+            
+            // 3行目: 撮影設定
+            const specFontSize = Math.round(imgWidth * fontSizeRatio * 0.944);
+            ctx.font = `500 ${specFontSize}px "Optima", "Cormorant Garamond", serif`;
+            ctx.fillStyle = '#666666';
+            
+            // ズームレンズかどうかを判定（レンズ名に"-"が含まれる）
+            const isZoom = exifData.lens.includes('-');
+            
+            // 焦点距離（ズームレンズの場合のみ表示）
+            const focalLengthText = (isZoom && exifData.focalLength) ? `${exifData.focalLength}mm  ·  ` : '';
+            
+            // カラーモード（ISOの後）
+            const colorModeText = exifData.colorMode ? `  ·  ${exifData.colorMode}` : '';
+            
+            const specText = `${focalLengthText}F${exifData.fNumber}  ·  ${exifData.shutterSpeed}s  ·  ISO ${exifData.iso}${colorModeText}`;
+            ctx.fillText(specText, padding, bottomY - matHeight * 0.24);
+        }
+        
+        // レンズ名のフォーマット（|の前後のスペーシングのみ調整）
+        function formatLensName(lensName) {
+            return lensName
+                .replace(/\s*\|\s*/g, '  |  ') // | の前後に適切なスペース
+                .toUpperCase();
+        }
+        
+        // ファイル選択イベント
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // 元のファイル名を保存（拡張子を除く）
+            currentFileName = file.name.replace(/\.[^/.]+$/, ''); // 拡張子を削除
+            
+            // Exif解析とSIGMAチェック
+            const isSigma = await parseExifData(file);
+            
+            if (!isSigma) {
+                alert('This tool is designed for Sigma cameras only.\nPlease upload a photo taken with a Sigma camera.');
+                // ファイル入力をリセット
+                fileInput.value = '';
+                return;
+            }
+            
+            // 画像読み込み
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    drawFrame(img);
+                    previewSection.style.display = 'block';
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // PNG保存（互換性向上版）
+        saveBtn.addEventListener('click', () => {
+            try {
+                // canvasからBlobを生成
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        alert('画像の生成に失敗しました。');
+                        return;
+                    }
+                    
+                    // Blobからダウンロード
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    const filename = currentFileName ? `${currentFileName}_frame.png` : `sigma-frame-${Date.now()}.png`;
+                    
+                    link.href = url;
+                    link.download = filename;
+                    link.style.display = 'none';
+                    
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    // メモリ解放
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                }, 'image/png', 1.0);
+            } catch (err) {
+                console.error('保存エラー:', err);
+                alert('画像の保存に失敗しました。ブラウザを変更するか、スクリーンショットをお試しください。');
+            }
+        });
+    </script>
+</body>
+</html>
